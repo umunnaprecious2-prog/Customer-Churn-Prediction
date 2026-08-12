@@ -1,0 +1,12 @@
+pandas==2.3.3
+numpy==1.26.4
+scikit-learn==1.4.0
+xgboost==3.2.0
+# Pinned to 4.5.0: lightgbm 4.7.0's Windows wheel crashes with
+# "OSError: access violation" during Dataset construction on this
+# environment. 4.5.0 is confirmed stable here.
+lightgbm==4.5.0
+matplotlib==3.10.9
+jupyter
+nbconvert
+ipykernel
