@@ -1,0 +1,759 @@
+<title>Customer Churn Intelligence &mdash; Iranian Telecom</title>
+<style>
+  .viz-root {
+    color-scheme: light;
+    --surface-1:      #fcfcfb;
+    --surface-2:      #ffffff;
+    --page-plane:     #f9f9f7;
+    --text-primary:   #0b0b0b;
+    --text-secondary: #52514e;
+    --text-muted:     #898781;
+    --gridline:       #e1e0d9;
+    --baseline:       #c3c2b7;
+    --border:         rgba(11,11,11,0.10);
+    --border-strong:  rgba(11,11,11,0.16);
+
+    --series-lgbm:    #2a78d6;  /* blue   -- LightGBM, chosen model / brand accent */
+    --series-xgb:     #eb6834;  /* orange -- XGBoost */
+    --series-rf:      #1baf7a;  /* aqua   -- Random Forest */
+    --series-lr:      #eda100;  /* yellow -- Logistic Regression baseline */
+    --series-red:     #e34948;  /* diverging pole: churn-increasing */
+    --series-blue:    #2a78d6;  /* diverging pole: churn-reducing */
+
+    --seq-100: #cde2fb; --seq-200: #9ec5f4; --seq-300: #6da7ec;
+    --seq-400: #3987e5; --seq-500: #256abf; --seq-600: #184f95;
+
+    --status-good:     #0ca30c;
+    --status-warning:  #fab219;
+    --status-serious:  #ec835a;
+    --status-critical: #d03b3b;
+
+    --success-text: #006300;
+
+    --font-display: ui-serif, "Iowan Old Style", "Palatino Linotype", "URW Palladio L", Georgia, serif;
+    --font-body: system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) .viz-root {
+      color-scheme: dark;
+      --surface-1:      #1a1a19;
+      --surface-2:      #201f1e;
+      --page-plane:     #0d0d0d;
+      --text-primary:   #ffffff;
+      --text-secondary: #c3c2b7;
+      --text-muted:     #898781;
+      --gridline:       #2c2c2a;
+      --baseline:       #383835;
+      --border:         rgba(255,255,255,0.10);
+      --border-strong:  rgba(255,255,255,0.18);
+
+      --series-lgbm:    #3987e5;
+      --series-xgb:     #d95926;
+      --series-rf:      #199e70;
+      --series-lr:      #c98500;
+      --series-red:     #e66767;
+      --series-blue:    #3987e5;
+
+      --seq-100: #184f95; --seq-200: #1c5cab; --seq-300: #256abf;
+      --seq-400: #3987e5; --seq-500: #6da7ec; --seq-600: #9ec5f4;
+
+      --status-good:     #0ca30c;
+      --status-warning:  #fab219;
+      --status-serious:  #ec835a;
+      --status-critical: #d03b3b;
+      --success-text: #0ca30c;
+    }
+  }
+  :root[data-theme="dark"] .viz-root {
+    color-scheme: dark;
+    --surface-1:      #1a1a19;
+    --surface-2:      #201f1e;
+    --page-plane:     #0d0d0d;
+    --text-primary:   #ffffff;
+    --text-secondary: #c3c2b7;
+    --text-muted:     #898781;
+    --gridline:       #2c2c2a;
+    --baseline:       #383835;
+    --border:         rgba(255,255,255,0.10);
+    --border-strong:  rgba(255,255,255,0.18);
+
+    --series-lgbm:    #3987e5;
+    --series-xgb:     #d95926;
+    --series-rf:      #199e70;
+    --series-lr:      #c98500;
+    --series-red:     #e66767;
+    --series-blue:    #3987e5;
+
+    --seq-100: #184f95; --seq-200: #1c5cab; --seq-300: #256abf;
+    --seq-400: #3987e5; --seq-500: #6da7ec; --seq-600: #9ec5f4;
+
+    --status-good:     #0ca30c;
+    --status-warning:  #fab219;
+    --status-serious:  #ec835a;
+    --status-critical: #d03b3b;
+    --success-text: #0ca30c;
+  }
+
+  * { box-sizing: border-box; }
+  .viz-root {
+    background: var(--page-plane);
+    color: var(--text-primary);
+    font-family: var(--font-body);
+    line-height: 1.5;
+    padding: 0 0 64px;
+  }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 0 28px; }
+
+  /* ---- Masthead ---- */
+  .masthead {
+    padding: 48px 0 32px;
+    border-bottom: 1px solid var(--border);
+  }
+  .eyebrow {
+    font-size: 12px; font-weight: 600; letter-spacing: 0.09em; text-transform: uppercase;
+    color: var(--series-lgbm); margin: 0 0 10px;
+  }
+  h1 {
+    font-family: var(--font-display);
+    font-weight: 500;
+    font-size: clamp(28px, 4vw, 40px);
+    line-height: 1.12;
+    margin: 0 0 10px;
+    text-wrap: balance;
+    letter-spacing: -0.01em;
+  }
+  .masthead p.lede {
+    font-size: 16px; color: var(--text-secondary); max-width: 62ch; margin: 0 0 18px;
+  }
+  .meta-row {
+    display: flex; flex-wrap: wrap; gap: 8px 22px;
+    font-size: 13px; color: var(--text-muted);
+  }
+  .meta-row span { white-space: nowrap; }
+  .meta-row b { color: var(--text-secondary); font-weight: 600; }
+
+  /* ---- KPI strip ---- */
+  .kpi-strip {
+    display: grid; grid-template-columns: repeat(5, 1fr); gap: 1px;
+    background: var(--border);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    overflow: hidden;
+    margin: 28px 0 8px;
+  }
+  .kpi-tile {
+    background: var(--surface-1);
+    padding: 18px 18px 16px;
+    display: flex; flex-direction: column; gap: 6px;
+    min-width: 0;
+  }
+  .kpi-label {
+    font-size: 12px; color: var(--text-muted); font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.06em;
+  }
+  .kpi-value {
+    font-size: 27px; font-weight: 600; letter-spacing: -0.01em;
+    font-variant-numeric: proportional-nums;
+  }
+  .kpi-caption { font-size: 12.5px; color: var(--text-secondary); }
+  .kpi-tile.accent .kpi-value { color: var(--series-lgbm); }
+
+  @media (max-width: 900px) {
+    .kpi-strip { grid-template-columns: repeat(2, 1fr); }
+  }
+
+  /* ---- Section chrome ---- */
+  section.card {
+    background: var(--surface-1);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 26px 28px 28px;
+    margin-top: 22px;
+  }
+  section.card + section.card { margin-top: 22px; }
+  .section-head { display: flex; justify-content: space-between; align-items: baseline; gap: 16px; margin-bottom: 4px; flex-wrap: wrap; }
+  h2 {
+    font-family: var(--font-display);
+    font-size: 21px; font-weight: 500; margin: 0;
+    letter-spacing: -0.005em;
+  }
+  .section-note { font-size: 13px; color: var(--text-muted); }
+  .section-desc { font-size: 14px; color: var(--text-secondary); max-width: 78ch; margin: 6px 0 20px; }
+  .two-col { display: grid; grid-template-columns: 1.15fr 1fr; gap: 28px; }
+  @media (max-width: 880px) { .two-col { grid-template-columns: 1fr; } }
+
+  /* ---- Chart primitives ---- */
+  .chart-legend { display: flex; flex-wrap: wrap; gap: 4px 16px; margin: 10px 0 4px; font-size: 12.5px; color: var(--text-secondary); }
+  .legend-item { display: inline-flex; align-items: center; gap: 6px; }
+  .legend-swatch { width: 10px; height: 10px; border-radius: 2px; flex: none; }
+  .legend-line { width: 14px; height: 2px; border-radius: 1px; flex: none; }
+  svg text { font-family: var(--font-body); fill: var(--text-secondary); }
+  svg .axis-label { font-size: 11px; fill: var(--text-muted); }
+  svg .value-label { font-size: 11.5px; fill: var(--text-secondary); font-variant-numeric: tabular-nums; }
+  svg .grid-line { stroke: var(--gridline); stroke-width: 1; }
+  svg .baseline { stroke: var(--baseline); stroke-width: 1; }
+
+  .bar-row { display: grid; grid-template-columns: 148px 1fr 64px; align-items: center; gap: 10px; margin: 7px 0; }
+  .bar-row .bar-label { font-size: 12.5px; color: var(--text-secondary); text-align: right; }
+  .bar-track { position: relative; height: 16px; background: var(--gridline); border-radius: 3px; overflow: hidden; }
+  .bar-fill { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 3px 0 0 3px; }
+  .bar-value { font-size: 12.5px; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+
+  /* diverging bars */
+  .div-row { display: grid; grid-template-columns: 148px 1fr 56px; align-items: center; gap: 10px; margin: 7px 0; }
+  .div-row .bar-label { font-size: 12.5px; color: var(--text-secondary); text-align: right; }
+  .div-track { position: relative; height: 16px; background: var(--gridline); border-radius: 3px; }
+  .div-mid { position: absolute; left: 50%; top: -2px; bottom: -2px; width: 1px; background: var(--baseline); }
+  .div-fill { position: absolute; top: 0; bottom: 0; }
+  .div-fill.pos { background: var(--series-red); border-radius: 0 3px 3px 0; }
+  .div-fill.neg { background: var(--series-blue); border-radius: 3px 0 0 3px; }
+
+  /* ---- Confusion matrix ---- */
+  .cm-wrap { display: flex; gap: 26px; align-items: center; flex-wrap: wrap; }
+  .cm-grid { display: grid; grid-template-columns: auto auto auto; gap: 3px; }
+  .cm-cell {
+    width: 92px; height: 66px; border-radius: 6px;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    font-size: 11.5px; color: var(--text-secondary);
+  }
+  .cm-cell b { font-size: 20px; color: var(--text-primary); font-variant-numeric: tabular-nums; }
+  .cm-cell.tn { background: color-mix(in oklab, var(--status-good) 14%, var(--surface-1)); }
+  .cm-cell.tp { background: color-mix(in oklab, var(--status-good) 26%, var(--surface-1)); }
+  .cm-cell.fp { background: color-mix(in oklab, var(--status-critical) 16%, var(--surface-1)); }
+  .cm-cell.fn { background: color-mix(in oklab, var(--status-critical) 26%, var(--surface-1)); }
+  .cm-axis { font-size: 11px; color: var(--text-muted); text-align: center; }
+  .cm-stats { display: flex; flex-direction: column; gap: 8px; font-size: 13px; color: var(--text-secondary); min-width: 180px; }
+  .cm-stats b { color: var(--text-primary); }
+
+  /* ---- Tables ---- */
+  .table-scroll { overflow-x: auto; margin-top: 8px; border: 1px solid var(--border); border-radius: 8px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 640px; }
+  thead th {
+    text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em;
+    color: var(--text-muted); padding: 10px 14px; background: var(--surface-2);
+    border-bottom: 1px solid var(--border); white-space: nowrap;
+  }
+  thead th.num, td.num { text-align: right; }
+  tbody td { padding: 9px 14px; border-bottom: 1px solid var(--border); white-space: nowrap; font-variant-numeric: tabular-nums; color: var(--text-secondary); }
+  tbody tr:last-child td { border-bottom: none; }
+  tbody td.rank { color: var(--text-muted); font-variant-numeric: tabular-nums; }
+  tbody td.id { color: var(--text-primary); font-weight: 600; }
+  tbody tr:hover td { background: var(--surface-2); }
+
+  .chip { display: inline-flex; align-items: center; gap: 5px; padding: 3px 9px 3px 7px; border-radius: 100px; font-size: 11.5px; font-weight: 600; }
+  .chip::before { content: ""; width: 6px; height: 6px; border-radius: 50%; }
+  .chip.critical { background: color-mix(in oklab, var(--status-critical) 16%, transparent); color: var(--status-critical); }
+  .chip.critical::before { background: var(--status-critical); }
+  .chip.high { background: color-mix(in oklab, var(--status-serious) 18%, transparent); color: color-mix(in oklab, var(--status-serious) 78%, var(--text-primary)); }
+  .chip.high::before { background: var(--status-serious); }
+  .chip.medium { background: color-mix(in oklab, var(--status-warning) 20%, transparent); color: color-mix(in oklab, var(--status-warning) 60%, var(--text-primary)); }
+  .chip.medium::before { background: var(--status-warning); }
+
+  .table-foot { font-size: 12.5px; color: var(--text-muted); padding: 10px 14px; }
+
+  /* ---- Segment grid ---- */
+  .segment-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 18px; margin-top: 6px; }
+  @media (max-width: 980px) { .segment-grid { grid-template-columns: repeat(2, 1fr); } }
+  .segment-card { border: 1px solid var(--border); border-radius: 9px; padding: 14px 16px 16px; }
+  .segment-card h3 { font-size: 13px; font-weight: 600; margin: 0 0 3px; }
+  .segment-card .segment-flag { font-size: 11px; color: var(--status-critical); font-weight: 600; margin-bottom: 8px; }
+  .segment-card .segment-sub { font-size: 11.5px; color: var(--text-muted); margin-bottom: 10px; }
+
+  /* ---- Threshold chart ---- */
+  .threshold-chart-wrap { position: relative; }
+  #threshold-tooltip {
+    position: absolute; pointer-events: none; background: var(--surface-2);
+    border: 1px solid var(--border-strong); border-radius: 7px; padding: 8px 10px;
+    font-size: 12px; color: var(--text-secondary); box-shadow: 0 6px 18px rgba(0,0,0,0.14);
+    opacity: 0; transition: opacity 0.1s; white-space: nowrap; z-index: 5;
+  }
+  #threshold-tooltip b { color: var(--text-primary); }
+  #threshold-tooltip .tt-row { display: flex; justify-content: space-between; gap: 14px; }
+
+  /* ---- Methodology / footer ---- */
+  .method-list { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px 28px; margin: 4px 0 0; padding: 0; list-style: none; }
+  @media (max-width: 880px) { .method-list { grid-template-columns: 1fr; } }
+  .method-list li { font-size: 13px; color: var(--text-secondary); padding-left: 16px; position: relative; }
+  .method-list li::before { content: "&mdash;"; position: absolute; left: 0; color: var(--text-muted); }
+  .method-list b { color: var(--text-primary); }
+  .assumption { display: inline-block; margin-top: 2px; font-size: 11.5px; color: var(--status-warning); font-weight: 600; }
+
+  footer.page-footer {
+    max-width: 1180px; margin: 34px auto 0; padding: 20px 28px 0;
+    border-top: 1px solid var(--border); font-size: 12.5px; color: var(--text-muted);
+    display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px;
+  }
+  footer.page-footer a { color: var(--series-lgbm); text-decoration: none; }
+  footer.page-footer a:hover { text-decoration: underline; }
+
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<div class="viz-root">
+  <div class="wrap">
+
+    <div class="masthead">
+      <p class="eyebrow">Churn Intelligence Report</p>
+      <h1>Customer Churn Intelligence</h1>
+      <p class="lede">Iranian telecom subscriber base &mdash; who is leaving, what predicts it, and which customers are worth contacting first, ranked by financial impact rather than probability alone.</p>
+      <div class="meta-row">
+        <span><b>2,850</b> customers analyzed</span>
+        <span><b>LightGBM</b> selected model (ROC-AUC 0.986)</span>
+        <span><b>0.30</b> recommended decision threshold</span>
+        <span>Source: <a href="https://github.com/umunnaprecious2-prog/Customer-Churn-Prediction" style="color:inherit;text-decoration:underline;">Customer_Churn_Analysis.ipynb</a></span>
+      </div>
+    </div>
+
+    <div class="kpi-strip">
+      <div class="kpi-tile">
+        <span class="kpi-label">Customers analyzed</span>
+        <span class="kpi-value">2,850</span>
+        <span class="kpi-caption">300 exact duplicates removed from 3,150 raw records</span>
+      </div>
+      <div class="kpi-tile">
+        <span class="kpi-label">Churn rate</span>
+        <span class="kpi-value">15.6%</span>
+        <span class="kpi-caption">446 customers churned</span>
+      </div>
+      <div class="kpi-tile">
+        <span class="kpi-label">Portfolio value at risk</span>
+        <span class="kpi-value">59,109</span>
+        <span class="kpi-caption">4.4% of 1,353,723 total value &middot; value units, not a stated currency</span>
+      </div>
+      <div class="kpi-tile">
+        <span class="kpi-label">Customers flagged</span>
+        <span class="kpi-value">468</span>
+        <span class="kpi-caption">at recommended threshold 0.30</span>
+      </div>
+      <div class="kpi-tile accent">
+        <span class="kpi-label">Model quality</span>
+        <span class="kpi-value">0.986</span>
+        <span class="kpi-caption">ROC-AUC, LightGBM, held-out test set</span>
+      </div>
+    </div>
+
+    <!-- MODEL COMPARISON -->
+    <section class="card">
+      <div class="section-head">
+        <h2>Model comparison</h2>
+        <span class="section-note">Held-out test set &middot; n = 570 &middot; threshold = 0.5</span>
+      </div>
+      <p class="section-desc">Logistic Regression is the instruct.md baseline; Random Forest, XGBoost and LightGBM are compared against it. LightGBM wins on ROC-AUC &mdash; the metric used for model selection, since the actual operating threshold is chosen from cost, not fixed at 0.5 (see Threshold Selection below).</p>
+      <div class="two-col">
+        <div>
+          <div id="model-bars"></div>
+          <div class="chart-legend" id="model-legend"></div>
+        </div>
+        <div>
+          <div class="section-note" style="margin-bottom:8px;">LightGBM confusion matrix, threshold = 0.5</div>
+          <div class="cm-wrap">
+            <div>
+              <div class="cm-grid">
+                <div></div><div class="cm-axis">Pred. stay</div><div class="cm-axis">Pred. churn</div>
+                <div class="cm-axis" style="writing-mode:vertical-rl;transform:rotate(180deg);display:flex;align-items:center;justify-content:center;">Actual stay</div>
+                <div class="cm-cell tn"><b>471</b>True negative</div>
+                <div class="cm-cell fp"><b>10</b>False positive</div>
+                <div class="cm-axis" style="writing-mode:vertical-rl;transform:rotate(180deg);display:flex;align-items:center;justify-content:center;">Actual churn</div>
+                <div class="cm-cell fn"><b>13</b>False negative</div>
+                <div class="cm-cell tp"><b>76</b>True positive</div>
+              </div>
+            </div>
+            <div class="cm-stats">
+              <div>Precision <b>88.4%</b></div>
+              <div>Recall <b>85.4%</b></div>
+              <div>F1 <b>0.869</b></div>
+              <div style="color:var(--text-muted);font-size:12px;margin-top:4px;">13 missed churners and 10 false alarms out of 570 test customers.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- THRESHOLD -->
+    <section class="card">
+      <div class="section-head">
+        <h2>Threshold selection</h2>
+        <span class="section-note">instruct.md's "Important Consideration"</span>
+      </div>
+      <p class="section-desc">False positives waste retention spend on customers who weren't leaving; false negatives lose the customer's full value. Because FN cost scales with each customer's actual value while FP cost is a flat assumed outreach cost (50 units &mdash; a placeholder pending real campaign figures), the cost-minimizing threshold sits below the default 0.5.</p>
+      <div class="threshold-chart-wrap">
+        <svg id="threshold-chart" viewBox="0 0 900 320" style="width:100%;height:auto;display:block;"></svg>
+        <div id="threshold-tooltip"></div>
+      </div>
+      <div class="chart-legend">
+        <span class="legend-item"><span class="legend-line" style="background:var(--series-lgbm);"></span>Total expected cost</span>
+        <span class="legend-item"><span class="legend-line" style="background:var(--series-rf);"></span>False-positive cost</span>
+        <span class="legend-item"><span class="legend-line" style="background:var(--series-xgb);"></span>False-negative cost</span>
+      </div>
+      <div class="segment-grid" style="grid-template-columns:repeat(2,1fr);margin-top:18px;">
+        <div class="segment-card">
+          <h3>Default threshold &mdash; 0.50</h3>
+          <div class="segment-sub">10 false positives &middot; 13 false negatives</div>
+          <div style="font-size:20px;font-weight:600;">2,757 <span style="font-size:12px;color:var(--text-muted);font-weight:400;">expected cost (test set)</span></div>
+        </div>
+        <div class="segment-card" style="border-color:color-mix(in oklab, var(--series-lgbm) 40%, var(--border));">
+          <h3 style="color:var(--series-lgbm);">Recommended &mdash; 0.30</h3>
+          <div class="segment-sub">10 false positives &middot; 11 false negatives</div>
+          <div style="font-size:20px;font-weight:600;color:var(--series-lgbm);">2,585 <span style="font-size:12px;color:var(--text-muted);font-weight:400;">expected cost (test set)</span></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- FEATURE IMPORTANCE -->
+    <section class="card">
+      <div class="section-head">
+        <h2>What drives churn</h2>
+        <span class="section-note">Random Forest / XGBoost / LightGBM, averaged &middot; Logistic Regression, signed</span>
+      </div>
+      <p class="section-desc"><code style="background:var(--surface-2);padding:1px 5px;border-radius:4px;font-size:12.5px;">status</code> is deliberately excluded from every chart here &mdash; see Methodology. <code style="background:var(--surface-2);padding:1px 5px;border-radius:4px;font-size:12.5px;">complains</code> leading legitimately (not as leakage) is the expected, healthy result.</p>
+      <div class="two-col">
+        <div>
+          <div class="section-note" style="margin-bottom:10px;">Average tree-model importance</div>
+          <div id="importance-bars"></div>
+        </div>
+        <div>
+          <div class="section-note" style="margin-bottom:10px;">Logistic Regression coefficient (direction)</div>
+          <div id="coef-bars"></div>
+          <div class="chart-legend">
+            <span class="legend-item"><span class="legend-swatch" style="background:var(--series-red);"></span>Increases churn risk</span>
+            <span class="legend-item"><span class="legend-swatch" style="background:var(--series-blue);"></span>Reduces churn risk</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- SEGMENTS -->
+    <section class="card">
+      <div class="section-head">
+        <h2>Churn rate by segment</h2>
+        <span class="section-note">Full 2,850-customer dataset</span>
+      </div>
+      <div class="segment-grid" id="segment-grid"></div>
+    </section>
+
+    <!-- HIGH RISK TABLE -->
+    <section class="card">
+      <div class="section-head">
+        <h2>Ranked high-risk customers</h2>
+        <span class="section-note">Risk Score = Churn Probability &times; Customer Value</span>
+      </div>
+      <p class="section-desc">Sorted by financial impact, not churn probability &mdash; this ordering <em>is</em> the retention team's contact priority. Full list of 468 flagged customers: <code style="background:var(--surface-2);padding:1px 5px;border-radius:4px;font-size:12.5px;">outputs/high_risk_customers.csv</code>.</p>
+      <div class="table-scroll">
+        <table>
+          <thead>
+            <tr>
+              <th>Rank</th><th>Customer</th><th>Risk level</th>
+              <th class="num">Churn prob.</th><th class="num">Customer value</th><th class="num">Risk score</th>
+              <th class="num">Tenure (mo.)</th><th>Complaint on file</th>
+            </tr>
+          </thead>
+          <tbody id="high-risk-body"></tbody>
+        </table>
+        <div class="table-foot">Showing top 20 of 468 flagged active customers.</div>
+      </div>
+    </section>
+
+    <!-- DORMANT WATCHLIST -->
+    <section class="card">
+      <div class="section-head">
+        <h2>Dormant customer watchlist</h2>
+        <span class="section-note">85 customers, $0 current value</span>
+      </div>
+      <p class="section-desc">Zero usage and zero recorded value &mdash; Risk Score is always 0 for this group regardless of churn probability, so a value-sorted list would hide them entirely. 51.8% of dormant customers have already churned, far above the 15.6% base rate. This is a reactivation case, not a standard retention discount.</p>
+      <div class="table-scroll">
+        <table>
+          <thead>
+            <tr><th>Rank</th><th>Customer</th><th class="num">Churn prob.</th><th class="num">Tenure (mo.)</th><th>Complaint on file</th><th>Age group</th></tr>
+          </thead>
+          <tbody id="dormant-body"></tbody>
+        </table>
+        <div class="table-foot">Showing top 10 of 85 dormant customers.</div>
+      </div>
+    </section>
+
+    <!-- METHODOLOGY -->
+    <section class="card">
+      <div class="section-head"><h2>Methodology &amp; assumptions</h2></div>
+      <ul class="method-list">
+        <li><b>Deduplication:</b> 300 exact-duplicate rows (9.5% of raw data) dropped before any split or training.</li>
+        <li><b>Age field:</b> raw <code>Age</code> was a 1:1 restatement of <code>Age Group</code> (only 5 distinct values) &mdash; dropped as redundant.</li>
+        <li><b><code>status</code> excluded from modeling:</b> churn rate is 5.6% at status=1 vs 47.5% at status=2 &mdash; the strongest relationship in the dataset and a likely leakage signal, since it isn't confirmed to be set before the churn outcome.</li>
+        <li><b>Dormant customers:</b> 85 customers (3.0%) with zero usage and zero value are flagged, not dropped &mdash; handled as a separate watchlist rather than folded into the value-ranked list.</li>
+        <li><b>Class imbalance</b> (15.6% churn) handled via class weighting in every model, not synthetic resampling, given the dataset's already-small size.</li>
+        <li><b>Deployment scoring:</b> the risk list is scored by a model refit on the full dataset, so its own training rows score optimistically &mdash; an accepted limitation of scoring your own customer base; it does not affect the test-set metrics shown above.</li>
+      </ul>
+      <span class="assumption">Placeholder assumption</span>
+      <p style="font-size:13px;color:var(--text-secondary);margin:4px 0 0;">False-positive cost is set to a flat 50 units per contacted customer for the threshold sweep above. This is not a real campaign cost &mdash; replace it with the business's actual retention-outreach cost and re-derive the threshold.</p>
+    </section>
+
+  </div>
+
+  <footer class="page-footer">
+    <span>Iranian Churn Dataset (UCI) &middot; analysis in <a href="https://github.com/umunnaprecious2-prog/Customer-Churn-Prediction/blob/main/Customer_Churn_Analysis.ipynb">Customer_Churn_Analysis.ipynb</a></span>
+    <span>Model artifact: <code>models/best_model_pipeline.joblib</code></span>
+  </footer>
+</div>
+
+<script>
+(function () {
+  const root = document.querySelector('.viz-root');
+  const cs = getComputedStyle(root);
+  const tok = (name) => cs.getPropertyValue(name).trim();
+
+  // ---------- data ----------
+  // Order matches the validated categorical adjacency sequence
+  // (blue, orange, aqua, yellow) -- see dataviz palette validation.
+  const MODELS = [
+    { name: 'LightGBM',            color: 'var(--series-lgbm)', precision: .884, recall: .854, f1: .869, roc_auc: .986 },
+    { name: 'XGBoost',             color: 'var(--series-xgb)',  precision: .874, recall: .854, f1: .864, roc_auc: .981 },
+    { name: 'Random Forest',       color: 'var(--series-rf)',   precision: .904, recall: .742, f1: .815, roc_auc: .981 },
+    { name: 'Logistic Regression', color: 'var(--series-lr)',   precision: .438, recall: .865, f1: .581, roc_auc: .914 },
+  ];
+
+  const THRESH = [
+    [0.05,1100,1638.84],[0.10,800,2085.08],[0.15,800,2085.08],[0.20,700,2085.08],
+    [0.25,550,2085.08],[0.30,500,2085.08],[0.35,500,2085.08],[0.40,500,2160.28],
+    [0.45,500,2160.28],[0.50,500,2257.12],[0.55,450,2257.12],[0.60,450,2309.16],
+    [0.65,400,2309.16],[0.70,350,2309.16],[0.75,350,2455.84],[0.80,350,2652.32],
+    [0.85,350,2652.32],[0.90,350,2912.37],[0.95,350,3284.14],
+  ].map(([threshold, fp_cost, fn_cost]) => ({ threshold, fp_cost, fn_cost, total_cost: fp_cost + fn_cost }));
+  const RECOMMENDED_T = 0.30;
+
+  const IMPORTANCE = [
+    { feature: 'complains',               avg: .2108, coef:  1.137 },
+    { feature: 'customer_value',          avg: .1313, coef: -0.198 },
+    { feature: 'frequency_of_use',        avg: .1298, coef: -2.433 },
+    { feature: 'seconds_of_use',          avg: .1248, coef:  0.987 },
+    { feature: 'subscription_length',     avg: .1061, coef: -0.093 },
+    { feature: 'call_failure',            avg: .0654, coef:  1.352 },
+    { feature: 'distinct_called_numbers', avg: .0646, coef: -0.478 },
+    { feature: 'frequency_of_sms',        avg: .0609, coef: -1.383 },
+    { feature: 'age_group',               avg: .0552, coef: -0.014 },
+    { feature: 'charge_amount',           avg: .0469, coef: -1.382 },
+    { feature: 'is_dormant',              avg: .0035, coef:  0.112 },
+    { feature: 'tariff_plan',             avg: .0006, coef:  0.031 },
+  ];
+
+  const SEGMENTS = [
+    { title: 'Complaint filed', flag: null,
+      rows: [ ['No complaint', 0.098, 2620], ['Complaint filed', 0.826, 230] ] },
+    { title: 'Account status', flag: 'Excluded from model (leakage risk)',
+      rows: [ ['Status 1 (active)', 0.056, 2166], ['Status 2 (non-active)', 0.475, 684] ] },
+    { title: 'Tariff plan', flag: null,
+      rows: [ ['Pay-as-you-go', 0.168, 2621], ['Contractual', 0.026, 229] ] },
+    { title: 'Age group', flag: null,
+      rows: [ ['1 (youngest)', 0.000, 112], ['2', 0.170, 921], ['3', 0.164, 1296], ['4', 0.202, 367], ['5 (oldest)', 0.013, 154] ] },
+  ];
+
+  const HIGH_RISK = [
+    ['CUST-00388',0.9999,987.25,987.13,30,1],['CUST-00686',0.9999,978.39,978.31,27,1],
+    ['CUST-00954',0.9998,929.29,929.12,27,1],['CUST-00997',0.9996,883.80,883.49,25,1],
+    ['CUST-00834',0.9999,858.28,858.16,32,1],['CUST-01522',1.0000,487.17,487.16,35,1],
+    ['CUST-00672',1.0000,432.31,432.30,36,0],['CUST-00174',0.9999,431.91,431.85,40,0],
+    ['CUST-01328',1.0000,395.69,395.67,37,0],['CUST-02664',0.9999,392.44,392.42,33,0],
+    ['CUST-01618',1.0000,386.82,386.81,34,0],['CUST-01131',1.0000,386.42,386.40,38,0],
+    ['CUST-00024',1.0000,383.22,383.22,36,1],['CUST-00949',1.0000,383.22,383.21,36,0],
+    ['CUST-01762',0.9999,374.00,373.98,39,0],['CUST-02316',0.9999,370.75,370.73,35,0],
+    ['CUST-01033',1.0000,363.06,363.06,36,1],['CUST-00124',1.0000,357.88,357.88,34,0],
+    ['CUST-02216',1.0000,349.06,349.06,32,0],['CUST-00770',0.9999,346.95,346.93,31,0],
+  ];
+
+  const DORMANT = [
+    ['CUST-00228',1.0000,32,1,3],['CUST-01856',1.0000,30,1,2],['CUST-00774',1.0000,31,1,2],
+    ['CUST-01881',1.0000,35,1,2],['CUST-01085',1.0000,32,1,2],['CUST-00418',1.0000,34,1,2],
+    ['CUST-01862',1.0000,33,1,2],['CUST-00617',1.0000,36,1,2],['CUST-01479',1.0000,34,1,4],
+    ['CUST-00128',0.9999,34,1,3],
+  ];
+
+  const fmt = (n, d = 0) => n.toLocaleString(undefined, { minimumFractionDigits: d, maximumFractionDigits: d });
+  const pct = (n) => (n * 100).toFixed(1) + '%';
+
+  function riskChip(prob) {
+    if (prob >= 0.7) return '<span class="chip critical">Critical</span>';
+    if (prob >= RECOMMENDED_T) return '<span class="chip high">High</span>';
+    if (prob >= 0.15) return '<span class="chip medium">Medium</span>';
+    return '';
+  }
+
+  // ---------- Model comparison bars (ROC-AUC) ----------
+  (function renderModelBars() {
+    const el = document.getElementById('model-bars');
+    const legend = document.getElementById('model-legend');
+    const max = 1.0;
+    el.innerHTML = MODELS.map(m => `
+      <div class="bar-row">
+        <span class="bar-label">${m.name}</span>
+        <div class="bar-track"><div class="bar-fill" style="width:${(m.roc_auc / max * 100).toFixed(1)}%;background:${m.color};"></div></div>
+        <span class="bar-value">${m.roc_auc.toFixed(3)}</span>
+      </div>`).join('');
+    legend.innerHTML = MODELS.map(m => `
+      <span class="legend-item"><span class="legend-swatch" style="background:${m.color};"></span>${m.name}${m.name==='LightGBM' ? ' (selected)' : ''}</span>`).join('');
+  })();
+
+  // ---------- Feature importance bars ----------
+  (function renderImportance() {
+    const el = document.getElementById('importance-bars');
+    const max = Math.max(...IMPORTANCE.map(d => d.avg));
+    el.innerHTML = IMPORTANCE.map(d => `
+      <div class="bar-row">
+        <span class="bar-label">${d.feature}</span>
+        <div class="bar-track"><div class="bar-fill" style="width:${(d.avg / max * 100).toFixed(1)}%;background:var(--seq-400);"></div></div>
+        <span class="bar-value">${(d.avg * 100).toFixed(1)}%</span>
+      </div>`).join('');
+  })();
+
+  // ---------- LR coefficient diverging bars ----------
+  (function renderCoefBars() {
+    const el = document.getElementById('coef-bars');
+    const maxAbs = Math.max(...IMPORTANCE.map(d => Math.abs(d.coef)));
+    el.innerHTML = IMPORTANCE.map(d => {
+      const half = Math.abs(d.coef) / maxAbs * 50;
+      const isPos = d.coef >= 0;
+      return `
+      <div class="div-row">
+        <span class="bar-label">${d.feature}</span>
+        <div class="div-track">
+          <div class="div-mid"></div>
+          <div class="div-fill ${isPos ? 'pos' : 'neg'}" style="${isPos ? `left:50%;width:${half}%;` : `right:50%;width:${half}%;`}"></div>
+        </div>
+        <span class="bar-value">${d.coef >= 0 ? '+' : ''}${d.coef.toFixed(2)}</span>
+      </div>`;
+    }).join('');
+  })();
+
+  // ---------- Segment mini-charts ----------
+  (function renderSegments() {
+    const el = document.getElementById('segment-grid');
+    el.innerHTML = SEGMENTS.map(seg => {
+      const max = Math.max(...seg.rows.map(r => r[1]), 0.05);
+      const rows = seg.rows.map(([label, rate, n]) => `
+        <div class="bar-row" style="grid-template-columns:96px 1fr 42px;">
+          <span class="bar-label" style="font-size:11.5px;">${label}</span>
+          <div class="bar-track" style="height:12px;"><div class="bar-fill" style="width:${(rate / max * 100).toFixed(1)}%;background:var(--seq-400);"></div></div>
+          <span class="bar-value" style="font-size:11.5px;">${pct(rate)}</span>
+        </div>`).join('');
+      return `
+      <div class="segment-card">
+        <h3>${seg.title}</h3>
+        ${seg.flag ? `<div class="segment-flag">${seg.flag}</div>` : '<div style="height:17px;"></div>'}
+        ${rows}
+      </div>`;
+    }).join('');
+  })();
+
+  // ---------- High risk table ----------
+  (function renderHighRisk() {
+    const el = document.getElementById('high-risk-body');
+    el.innerHTML = HIGH_RISK.map((row, i) => {
+      const [id, prob, value, score, tenure, complains] = row;
+      return `
+      <tr>
+        <td class="rank">${i + 1}</td>
+        <td class="id">${id}</td>
+        <td>${riskChip(prob)}</td>
+        <td class="num">${pct(prob)}</td>
+        <td class="num">${fmt(value, 2)}</td>
+        <td class="num">${fmt(score, 2)}</td>
+        <td class="num">${tenure}</td>
+        <td>${complains ? 'Yes' : String.fromCharCode(8212)}</td>
+      </tr>`;
+    }).join('');
+  })();
+
+  // ---------- Dormant table ----------
+  (function renderDormant() {
+    const el = document.getElementById('dormant-body');
+    el.innerHTML = DORMANT.map((row, i) => {
+      const [id, prob, tenure, complains, ageGroup] = row;
+      return `
+      <tr>
+        <td class="rank">${i + 1}</td>
+        <td class="id">${id}</td>
+        <td class="num">${pct(prob)}</td>
+        <td class="num">${tenure}</td>
+        <td>${complains ? 'Yes' : String.fromCharCode(8212)}</td>
+        <td>${ageGroup}</td>
+      </tr>`;
+    }).join('');
+  })();
+
+  // ---------- Threshold cost line chart ----------
+  (function renderThresholdChart() {
+    const svg = document.getElementById('threshold-chart');
+    const tooltip = document.getElementById('threshold-tooltip');
+    const W = 900, H = 320;
+    const M = { top: 16, right: 20, bottom: 34, left: 56 };
+    const plotW = W - M.left - M.right;
+    const plotH = H - M.top - M.bottom;
+
+    const xMin = 0.05, xMax = 0.95;
+    const yMax = Math.ceil(Math.max(...THRESH.map(d => d.total_cost)) / 500) * 500;
+    const x = (t) => M.left + (t - xMin) / (xMax - xMin) * plotW;
+    const y = (v) => M.top + plotH - (v / yMax) * plotH;
+
+    const ns = 'http://www.w3.org/2000/svg';
+    const mk = (tag, attrs) => {
+      const e = document.createElementNS(ns, tag);
+      for (const k in attrs) e.setAttribute(k, attrs[k]);
+      return e;
+    };
+
+    // gridlines + y ticks
+    const ySteps = 5;
+    for (let i = 0; i <= ySteps; i++) {
+      const v = (yMax / ySteps) * i;
+      svg.appendChild(mk('line', { class: 'grid-line', x1: M.left, x2: W - M.right, y1: y(v), y2: y(v) }));
+      const t = mk('text', { class: 'axis-label', x: M.left - 8, y: y(v) + 4, 'text-anchor': 'end' });
+      t.textContent = fmt(v);
+      svg.appendChild(t);
+    }
+    // x ticks
+    [0.05, 0.25, 0.5, 0.75, 0.95].forEach(v => {
+      const t = mk('text', { class: 'axis-label', x: x(v), y: H - 10, 'text-anchor': 'middle' });
+      t.textContent = v.toFixed(2);
+      svg.appendChild(t);
+    });
+    svg.appendChild(mk('line', { class: 'baseline', x1: M.left, x2: W - M.right, y1: M.top + plotH, y2: M.top + plotH }));
+
+    // recommended threshold reference line
+    const rx = x(RECOMMENDED_T);
+    svg.appendChild(mk('line', { x1: rx, x2: rx, y1: M.top, y2: M.top + plotH, stroke: 'var(--series-lgbm)', 'stroke-width': 1.5, 'stroke-dasharray': '3,3', opacity: 0.6 }));
+    const rt = mk('text', { x: rx, y: M.top + 12, 'text-anchor': 'middle', class: 'axis-label', fill: 'var(--series-lgbm)' });
+    rt.textContent = 'recommended 0.30';
+    rt.style.fill = tok('--series-lgbm');
+    svg.appendChild(rt);
+
+    function path(key, color, width) {
+      const d = THRESH.map((pt, i) => `${i === 0 ? 'M' : 'L'} ${x(pt.threshold).toFixed(1)} ${y(pt[key]).toFixed(1)}`).join(' ');
+      svg.appendChild(mk('path', { d, fill: 'none', stroke: color, 'stroke-width': width, 'stroke-linejoin': 'round', 'stroke-linecap': 'round' }));
+    }
+    path('fp_cost', tok('--series-rf'), 2);
+    path('fn_cost', tok('--series-xgb'), 2);
+    path('total_cost', tok('--series-lgbm'), 2.5);
+
+    // hover targets
+    THRESH.forEach(pt => {
+      const hit = mk('circle', { cx: x(pt.threshold), cy: y(pt.total_cost), r: 10, fill: 'transparent' });
+      hit.addEventListener('mouseenter', () => {
+        tooltip.innerHTML = `<b>threshold ${pt.threshold.toFixed(2)}</b>
+          <div class="tt-row"><span>FP cost</span><b>${fmt(pt.fp_cost)}</b></div>
+          <div class="tt-row"><span>FN cost</span><b>${fmt(pt.fn_cost)}</b></div>
+          <div class="tt-row"><span>Total</span><b>${fmt(pt.total_cost)}</b></div>`;
+        const rect = svg.getBoundingClientRect();
+        const px = rect.width * (x(pt.threshold) / W);
+        const py = rect.height * (y(pt.total_cost) / H);
+        tooltip.style.left = Math.min(px + 12, rect.width - 150) + 'px';
+        tooltip.style.top = Math.max(py - 60, 0) + 'px';
+        tooltip.style.opacity = '1';
+        svg.appendChild(mk('circle', { cx: x(pt.threshold), cy: y(pt.total_cost), r: 4, fill: tok('--series-lgbm'), stroke: tok('--surface-1'), 'stroke-width': 2, id: 'hover-dot' }));
+      });
+      hit.addEventListener('mouseleave', () => {
+        tooltip.style.opacity = '0';
+        const dot = document.getElementById('hover-dot');
+        if (dot) dot.remove();
+      });
+      svg.appendChild(hit);
+    });
+  })();
+})();
+</script>
